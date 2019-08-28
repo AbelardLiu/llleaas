@@ -5,22 +5,22 @@ else
     Q = @
 endif
 
-all: add-excutable unix-format binary image
+all: add-executable unix-format binary image
 
 build-binary:
-    $(Q)cd builder/; ./compile.sh
+	${Q}cd builder/; ./compile.sh
 
 build-image:
-    $(Q)cd builder/; ./docker.sh
+	$(Q)cd builder/; ./docker.sh
 
 clean-binary:
-    $(Q)cd builder/; ./uncompile.sh
+	$(Q)cd builder/; ./uncompile.sh
 
 clean-image:
-    $(Q)cd builder/; ./undocker.sh
+	$(Q)cd builder/; ./undocker.sh
 
 build-tests:
-    $(Q)cd builder/; ./test.sh
+	$(Q)cd builder/; ./test.sh
 
 .PHONY: clean
 clean: clean-image clean-binary
@@ -32,9 +32,9 @@ binary: clean-binary build-binary
 tests: build-tests
 
 unix-format:
-    $(Q)dos2unix builder/*
+	$(Q)dos2unix builder/*
 
 add-executable:
-    $(Q)chmod +x builder/*.sh
-    $(Q)chmod -R +x builder/compile
-    $(Q)chmod -R +x builder/docker
+	$(Q)chmod +x builder/*.sh
+	$(Q)chmod -R +x builder/compile
+	$(Q)chmod -R +x builder/docker

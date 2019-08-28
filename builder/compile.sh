@@ -12,7 +12,7 @@ BUILD_SCRIPT="${COMPILE_DST}/build.sh"
 BUILD_IMAGE="golang:alpine"
 
 # build binary in container
-docker run -v ${COMPILE_SRC}:${COMPILE_DST} -v ${LLLEAAS_SOURCE_SRC}:${LLLEAAS_SOURCE_DST} -i {BUILD_IMAGE} ${BUILD_SCRIPT}
+docker run -v ${COMPILE_SRC}:${COMPILE_DST} -v ${LLLEAAS_SOURCE_SRC}:${LLLEAAS_SOURCE_DST} -i ${BUILD_IMAGE} ${BUILD_SCRIPT}
 
 # mv binary into dst directory
 APP_NAME="llleaas"
