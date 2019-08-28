@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -x
+
+mkdir -p ${HOME}
+chown -R ${USER_UID}:${GROUP_ID} ${HOME}
+
+chmod -R 700 ${HONE}
+
+chmod ug+rw /etc/passwd
+
+if [ -w /etc/passwd ]; then
+    echo "${USER_NAME}:x:${USER_UID}:${GROUP_ID}:${USER_NAME}:${HOME}:/bin/bash" >> /etc/passwd
+fi
+
+if [ -w /etc/group ]; then
+    echo "${GROUP_NAME}:x:${GROUP_ID}" >> /etc/group
+fi
+
+# no need for this script to remain in the image after running
+rm $0

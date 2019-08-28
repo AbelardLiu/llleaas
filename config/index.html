@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Websocket</title>
+</head>
+<body>
+<h1>字符串转换大写</h1>
+<form>
+    <p>
+        字符串: <input id="content" type="text" placeholder="输入要转换的字符串">
+    </p>
+</form>
+<label id="result">结果为：</label><br><br>
+<button onclick="send()">转换</button>
+
+
+<script type="text/javascript">
+    var sock = null;
+    var wsuri = "ws://127.0.0.1:51010/hermes/registry/upper";
+    sock = new WebSocket(wsuri);
+    sock.onmessage = function(e) {
+        var result = document.getElementById('result');
+        var event = JSON.parse(e.data)
+        result.innerHTML = "结果为：" + event.message;
+    }
+    sock.onclose = function(e){
+        console.log("ws close: " + e.code + " " + e.reason + " " + e.wasClean);
+        console.log(e);
+    }
+
+    sock.onopen = function(e){
+        var data = {
+            type: "register",
+            message: "123"
+        }
+
+        sock.send(JSON.stringify(data));
+    }
+
+    function send() {
+        var msg = document.getElementById('content').value + "\n";
+        var data = {
+            type: "message",
+            message: msg
+        }
+        //var msg = "hello"
+        sock.send(JSON.stringify(data));
+    }
+</script>
+</body>
+</html>
