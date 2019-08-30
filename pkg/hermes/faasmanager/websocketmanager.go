@@ -84,6 +84,7 @@ func NewWebsocketManager(name string, option *options.HermesOption) *WebsocketMa
 
 func (m *WebsocketManager) Start(basepath string) error {
 	m.Router.HandleFunc(basepath + "/registry/index", m.Index).Methods(http.MethodGet)
+	m.Router.HandleFunc(basepath + "/registry/message/{faas_id}", m.Message).Methods(http.MethodPost)
 	m.Router.HandleFunc(basepath + "/registry/faas", m.ListFaas).Methods(http.MethodGet)
 	m.Router.HandleFunc(basepath + "/registry/faas/{faas_id}", m.GetFaas).Methods(http.MethodGet)
 
@@ -228,7 +229,7 @@ func (m *WebsocketManager) Upper(ws *websocket.Conn) {
 			event.Type = "response"
 			msg := Response{
 				Code: 0,
-				Message: "faas insatnce " + faasSpec.Id + " register successful",
+				Message: "faas instance " + faasSpec.Id + " register successful",
 			}
 
 			msgBytes, _ := json.Marshal(msg)
@@ -238,14 +239,18 @@ func (m *WebsocketManager) Upper(ws *websocket.Conn) {
 				continue
 			}
 			continue
+		} else if ( event.Type == "response") {
+			continue
+		} else {
+			event.Type = "data"
+			event.Message = strings.ToUpper(event.Message)
+			if err = websocket.JSON.Send(ws, event); err != nil {
+				fmt.Println(err)
+				continue
+			}
 		}
 
-		event.Type = "data"
-		event.Message = strings.ToUpper(event.Message)
-		if err = websocket.JSON.Send(ws, event); err != nil {
-			fmt.Println(err)
-			continue
-		}
+
 	}
 }
 
