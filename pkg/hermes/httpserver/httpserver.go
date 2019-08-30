@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"lll.github.com/llleaas/cmd/hermes/app/options"
 	"lll.github.com/llleaas/pkg/common/log"
 	"net/http"
 	"os"
@@ -12,20 +13,22 @@ type HttpServer struct {
 	Name string
 	Ip string
 	Port int32
+	Option *options.HermesOption
 	Server *http.Server
 }
 
-func NewHttpServer(name string, ip string, port int32) *HttpServer {
+func NewHttpServer(name string, ip string, port int32, option *options.HermesOption) *HttpServer {
 	return &HttpServer{
 		Name: name,
 		Ip: ip,
 		Port: port,
+		Option: option,
 		Server: nil,
 	}
 }
 
 func (s *HttpServer)Start(stopCh <- chan struct{}) error {
-	handler := NewHttpHandler(s.Name)
+	handler := NewHttpHandler(s.Name, s.Option)
 	handler.Start()
 
 	listenAddress := s.Ip + ":" + strconv.Itoa(int(s.Port))

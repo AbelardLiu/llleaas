@@ -12,7 +12,7 @@ func Run(option *options.HermesOption, stopCh <- chan struct{}) error {
 	log.UseCaller()
 	log.GetLogger().Info("server is started!")
 
-	httpServer := hermesHttp.NewHttpServer("hermes-http-server", option.Ip, option.Port)
+	httpServer := hermesHttp.NewHttpServer("hermes-http-server", option.Ip, option.Port, option)
 
 	go httpServer.Start(stopCh)
 

@@ -1,98 +1,75 @@
 package httpserver
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/websocket"
-	"html/template"
-	"io/ioutil"
+	"lll.github.com/llleaas/cmd/hermes/app/options"
 	"lll.github.com/llleaas/pkg/common/log"
+	"lll.github.com/llleaas/pkg/hermes/faasmanager"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 )
 
-type Event struct {
-	Type string	`json:"type"`
-	Message string `json:"message"`
-}
+
 
 type HttpHandler struct {
 	Name string
 	Router *mux.Router
+	FaasManager faasmanager.FaaSManager
+	Option *options.HermesOption
 	Connections map[string] *websocket.Conn
+	FaasProxy *httputil.ReverseProxy
 }
 
 const HERMES_PATH = "/hermes"
 
-func NewHttpHandler(name string) (*HttpHandler) {
+
+func startFaasManager(name string, option *options.HermesOption) faasmanager.FaaSManager {
+	faasmgr := faasmanager.NewWebsocketManager(name, option)
+	err := faasmgr.Start(HERMES_PATH)
+	if err != nil {
+		log.GetLogger().Fatalf("http handler start faas manager error: %v", err)
+		panic(err)
+	}
+
+	return faasmgr
+}
+
+func NewHttpHandler(name string, option *options.HermesOption) (*HttpHandler) {
+	faasmgr := startFaasManager(name, option)
+
 	return &HttpHandler{
 		Name: name,
+		Option: option,
 		Router: mux.NewRouter(),
+		FaasManager: faasmgr,
 		Connections: make(map[string] *websocket.Conn),
+		FaasProxy: nil,
 	}
 }
 
 func (h *HttpHandler)Start() error {
-	h.Router.HandleFunc(HERMES_PATH + "/registry/message", h.Message).Methods(http.MethodPost)
-	h.Router.HandleFunc(HERMES_PATH + "/registry/index", h.Index).Methods(http.MethodGet)
-
-	h.Router.Handle(HERMES_PATH + "/registry/upper", websocket.Handler(h.Upper))
+	// create reverse proxy to default faas
+	faasUrl, err := url.Parse(h.Option.DefaultFaasUrl)
+	if err != nil {
+		log.GetLogger().Errorf("hermes http handler start default faas url parse error: %v", err)
+		return err
+	}
+	h.FaasProxy = httputil.NewSingleHostReverseProxy(faasUrl)
 
 	return nil
 }
 
 func (h *HttpHandler)ServeHTTP(w http.ResponseWriter,r *http.Request) {
-	h.Router.ServeHTTP(w, r)
-}
-
-func (h *HttpHandler)Index(w http.ResponseWriter,r *http.Request) {
-	if r.Method != "GET" {
+	if strings.HasPrefix(r.URL.Path, HERMES_PATH) {
+		// hermes path
+		h.FaasManager.ServeHTTP(w, r)
 		return
 	}
 
-	t, _ := template.ParseFiles("index.html")
-	t.Execute(w, nil)
-}
+	// faas maanger path
+	h.FaasProxy.ServeHTTP(w, r)
 
-func (h *HttpHandler)Message(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.GetLogger().Errorf("Http handler message read message error: %v", err)
-		return
-	}
-
-	var message Event
-	err = json.Unmarshal(body, &message)
-	if err != nil {
-		log.GetLogger().Errorf("Http handler message unmarshal json error: %v", err)
-		return
-	}
-
-	websocket.JSON.Send(h.Connections["123"], message);
-
-	res, _ := json.Marshal(message)
-	w.Write(res)
-}
-
-func (h *HttpHandler) Upper(ws *websocket.Conn) {
-	var err error
-	for {
-		var reply Event
-
-		if err = websocket.JSON.Receive(ws, &reply); err != nil {
-			fmt.Println(err)
-			break
-		}
-
-		if reply.Type == "register" {
-			h.Connections[reply.Message] = ws
-		}
-
-		reply.Message = strings.ToUpper(reply.Message)
-		if err = websocket.JSON.Send(ws, reply); err != nil {
-			fmt.Println(err)
-			continue
-		}
-	}
 }

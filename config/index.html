@@ -8,44 +8,77 @@
 <h1>字符串转换大写</h1>
 <form>
     <p>
+        Faas注册 :
+        标识符：<input id="faas_id" type="text" placeholder="输入faas唯一标识号">
+        描述：<input id="faas_desc" type="text" placeholder="输入faas描述">
+
+    </p>
+    <p>
         字符串: <input id="content" type="text" placeholder="输入要转换的字符串">
+
     </p>
 </form>
 <label id="result">结果为：</label><br><br>
-<button onclick="send()">转换</button>
+<button onclick="register()">注册</button>
+<button onclick="send()">发送</button>
 
 
 <script type="text/javascript">
     var sock = null;
-    var wsuri = "ws://127.0.0.1:51010/hermes/registry/upper";
-    sock = new WebSocket(wsuri);
-    sock.onmessage = function(e) {
-        var result = document.getElementById('result');
-        var event = JSON.parse(e.data)
-        result.innerHTML = "结果为：" + event.message;
-    }
-    sock.onclose = function(e){
-        console.log("ws close: " + e.code + " " + e.reason + " " + e.wasClean);
-        console.log(e);
-    }
+    var host = window.location
 
-    sock.onopen = function(e){
-        var data = {
-            type: "register",
-            message: "123"
-        }
 
-        sock.send(JSON.stringify(data));
-    }
 
     function send() {
-        var msg = document.getElementById('content').value + "\n";
+        var msg = document.getElementById('content').value;
         var data = {
             type: "message",
             message: msg
         }
         //var msg = "hello"
         sock.send(JSON.stringify(data));
+    }
+
+    function register() {
+        if ( sock !== null ) {
+            sock.close();
+        }
+        let wsuri = "ws://" + host.host + "/hermes/registry/upper"
+        sock = new WebSocket(wsuri);
+
+        sock.onmessage = function(e) {
+            var result = document.getElementById('result');
+            var event = JSON.parse(e.data)
+            if (event.type === "response") {
+                let res = JSON.parse(event.message)
+                result.innerHTML = "结果为：" + res.message;
+            } else if (event.type === "data") {
+                result.innerHTML = "结果为：" + event.message;
+            } else {
+                result.innerHTML = "结果为：" + event.message;
+            }
+        }
+        sock.onclose = function(e){
+            console.log("ws close: " + e.code + " " + e.reason + " " + e.wasClean);
+            console.log(e);
+        }
+
+        sock.onopen = function(e){
+            let lfaasId = document.getElementById('faas_id').value;
+            let lfaasDesc = document.getElementById('faas_desc').value;
+            let msg = {
+                faas_id: lfaasId,
+                description: lfaasDesc
+            }
+            let msgStr = JSON.stringify(msg)
+
+            var data = {
+                type: "register",
+                message: msgStr
+            }
+
+            sock.send(JSON.stringify(data));
+        }
     }
 </script>
 </body>
