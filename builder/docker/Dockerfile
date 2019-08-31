@@ -12,7 +12,7 @@ ENV USER_UID=1001 \
 RUN mkdir -p ${HOME}/log; \
     mkdir -p ${HOME}/bin
 
-COPY _output/bin/llleaas ${LLLEAAS}
+COPY _output/bin/hermes ${LLLEAAS}
 
 COPY bin ${HOME}/bin
 COPY config ${HOME}/config

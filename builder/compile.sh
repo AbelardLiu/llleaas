@@ -16,9 +16,10 @@ docker run -v ${COMPILE_SRC}:${COMPILE_DST} -v ${LLLEAAS_SOURCE_SRC}:${LLLEAAS_S
 
 # mv binary into dst directory
 APP_NAME="llleaas"
-APP_SRC="${LLLEAAS_SOURCE_SRC}/cmd/${APP_NAME}"
+APP_SRC="${LLLEAAS_SOURCE_SRC}/cmd/hermes/${APP_NAME}"
+APP_DST_NAME="hermes"
 APP_DST="${CUR_PATH}/docker/_output/bin"
 
 # mk dst dir
 mkdir -p ${APP_DST}
-mv ${APP_SRC} ${APP_DST}
+mv ${APP_SRC} ${APP_DST}/${APP_DST_NAME}
