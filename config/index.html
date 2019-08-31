@@ -49,10 +49,10 @@
         sock.onmessage = function(e) {
             var result = document.getElementById('result');
             var event = JSON.parse(e.data)
-            if (event.type === "response") {
+            if (event.faas === "response") {
                 let res = JSON.parse(event.message)
                 result.innerHTML = "结果为：" + res.message;
-            } else if (event.type === "data") {
+            } else if (event.faas === "data") {
                 result.innerHTML = "结果为：" + event.message;
             } else {
                 result.innerHTML = "结果为：" + event.message;
