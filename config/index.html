@@ -3,6 +3,11 @@
 <head>
     <meta charset="utf-8"/>
     <title>Websocket</title>
+    <style>
+        table, td {
+            border: 1px solid black;
+        }
+    </style>
 </head>
 <body>
 <h1>字符串转换大写</h1>
@@ -11,28 +16,157 @@
         Faas注册 :
         标识符：<input id="faas_id" type="text" placeholder="输入faas唯一标识号">
         描述：<input id="faas_desc" type="text" placeholder="输入faas描述">
-
+        <input id="faas_register_submit" type="submit">
     </p>
     <p>
         字符串: <input id="content" type="text" placeholder="输入要转换的字符串">
 
     </p>
 </form>
-<label id="result">结果为：</label><br><br>
+
+<form>
+    <table id="faas_table">
+        <head>
+            <td>Faas Id</td>
+            <td>Faas Description</td>
+        </head>
+    </table>
+</form>
+
+<form>
+    <table id="function_table">
+        <head>
+            <td>Function Id</td>
+            <td>Function Name</td>
+            <td>Function Version</td>
+            <td>Language</td>
+        </head>
+    </table>
+</form>
+
 <button onclick="register()">注册</button>
 <button onclick="send()">发送</button>
+<button onclick="getFaas()">获取FaaS</button>
+<button onclick="getFunction()">获取Function</button>
 
+<form>
+    DeployFunction
+    FaasId <input id="deploy_faas_id" type="text" placeholder="输入faas唯一标识号">
+    FunctionName <input id="deploy_function_name" type="text" placeholder="输入函数名">
+    FunctionVersion <input id="deploy_function_version" type="text" placeholder="输入函数版本号">
+</form>
+
+<button onclick="deployFunction()">
+    deployFunction
+</button>
+
+<br><br>
+<label id="result">结果为：</label>
+<br><br>
 
 <script type="text/javascript">
     var sock = null;
-    var host = window.location
+    var host = window.location;
 
+    function getFunction() {
+        var xmlhttp = new XMLHttpRequest();
+        var url = "http://" + host.host + "/function/query";
+        xmlhttp.open("GET", url, false);
+        xmlhttp.send( null );
+        var resObj = JSON.parse(xmlhttp.responseText);
+
+        var funcListTable = document.getElementById("function_table");
+        funcListTable.innerHTML = "";
+        var header = funcListTable.createTHead();
+        var hrow = header.insertRow(0);
+        var hcell1 = hrow.insertCell(0);
+        var hcell2 = hrow.insertCell(1);
+        var hcell3 = hrow.insertCell(2);
+        var hcell4 = hrow.insertCell(3);
+        hcell1.innerHTML = "Function Id";
+        hcell2.innerHTML = "Function Name";
+        hcell3.innerHTML = "Function Version";
+        hcell4.innerHTML = "Language";
+
+        for ( var val in resObj ){
+            var functionId = resObj[val].functionId;
+            var functionName = resObj[val].functionName;
+            var functionVersion = resObj[val].version;
+            var functionLanguage = resObj[val].language;
+
+
+            var row = funcListTable.insertRow(-1);
+
+            var cell1 = row.insertCell(0);
+            var cell2 = row.insertCell(1);
+            var cell3 = row.insertCell(2);
+            var cell4 = row.insertCell(3);
+
+            cell1.innerHTML = functionId;
+            cell2.innerHTML = functionName;
+            cell3.innerHTML = functionVersion;
+            cell4.innerHTML = functionLanguage;
+
+            console.log(resObj[val]);
+        }
+    }
+
+    function deployFunction() {
+        var xmlhttp = new XMLHttpRequest();
+        var functionName = document.getElementById("deploy_function_name").value;
+        var functionVersion = document.getElementById("deploy_function_version").value;
+        var faasId = document.getElementById("deploy_faas_id").value;
+        var url = "http://" + host.host + "/hermes/function/deploy/" + functionName + "/version/" + functionVersion;
+
+        var msg = {
+            functionName: functionName,
+            functionversion: functionVersion,
+            faasId: faasId,
+            functionRuntime: "webEmulator",
+        };
+
+        xmlhttp.open("POST", url, false);
+        xmlhttp.send(JSON.stringify(msg));
+    }
+
+    function getFaas() {
+        var xmlhttp = new XMLHttpRequest();
+        var url = "http://" + host.host + "/hermes/registry/faas";
+        xmlhttp.open("GET", url, false);
+        xmlhttp.send(null);
+        var resObj = JSON.parse(xmlhttp.responseText);
+        var faasListTable = document.getElementById("faas_table");
+        faasListTable.innerHTML = "";
+        var header = faasListTable.createTHead();
+        var hrow = header.insertRow(0);
+        var hcell1 = hrow.insertCell(0);
+        var hcell2 = hrow.insertCell(1);
+        hcell1.innerHTML = "Faas Id";
+        hcell2.innerHTML = "Faas Description";
+
+        for ( var val in resObj ) {
+            var faasId = val;
+            var faasDesc = resObj[val].FaasSpec.description;
+
+            var row = faasListTable.insertRow(-1);
+
+            var cell1 = row.insertCell(0);
+            var cell2 = row.insertCell(1);
+
+            cell1.innerHTML = faasId;
+            cell2.innerHTML = faasDesc;
+
+            console.log(val + " " + resObj[val]);
+        }
+
+        console.log(xmlhttp.responseText);
+    }
 
 
     function send() {
         var msg = document.getElementById('content').value;
         var data = {
-            type: "message",
+            type: "data",
             message: msg
         }
         //var msg = "hello"

@@ -3,7 +3,6 @@ package faasmanager
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/websocket"
 	"html/template"
@@ -14,13 +13,13 @@ import (
 	"lll.github.com/llleaas/pkg/hermes/function"
 	"net/http"
 	"net/http/httputil"
-	"strings"
 	"sync"
 )
 
 type WebsocketFaas struct {
 	FaasSpec   faascommon.FaaSSpec
 	Connection *websocket.Conn
+	ConnectionStatus     string
 }
 
 type WebsocketManager struct {
@@ -28,6 +27,7 @@ type WebsocketManager struct {
 	Router *mux.Router
 	Option *options.HermesOption
 	FaaSInstances map[string] faascommon.FaaSInstance
+	WebsocketIndex map[string] string                 // this map is used to find faas instance from websocket remoteAddr
 	FunctionManager function.FunctionManager
 	FaasMux sync.Mutex
 	FaasProxy *httputil.ReverseProxy
@@ -37,6 +37,7 @@ func NewWebsocketFaas(spec faascommon.FaaSSpec, ws *websocket.Conn) *WebsocketFa
 	return &WebsocketFaas{
 		FaasSpec:   spec,
 		Connection: ws,
+		ConnectionStatus: "initialize",
 	}
 }
 
@@ -73,6 +74,10 @@ func (f *WebsocketFaas)Spec() faascommon.FaaSSpec {
 	return f.FaasSpec
 }
 
+func (f *WebsocketFaas)Status() string {
+	return f.ConnectionStatus
+}
+
 
 func NewWebsocketManager(name string, option *options.HermesOption) *WebsocketManager{
 	return &WebsocketManager{
@@ -80,6 +85,7 @@ func NewWebsocketManager(name string, option *options.HermesOption) *WebsocketMa
 		Option: option,
 		Router: mux.NewRouter(),
 		FaaSInstances: make(map[string] faascommon.FaaSInstance),
+		WebsocketIndex: make(map[string] string),
 		FunctionManager: nil,
 		FaasMux: sync.Mutex{},
 		FaasProxy: nil,
@@ -95,7 +101,7 @@ func (m *WebsocketManager) Start(basepath string) error {
 	m.Router.Handle(basepath + "/registry/upper", websocket.Handler(m.Upper))
 
 	// register function handler
-	mgr := function.NewBasicFunctionManager()
+	mgr := function.NewBasicFunctionManager(m, m.Option)
 	err := mgr.RegisterHandler(basepath, m.Router)
 	if err != nil {
 		log.GetLogger().Errorf("websocket faas manager start register function handler error: %v", err)
@@ -111,12 +117,28 @@ func (m *WebsocketManager) Register(id string, faas faascommon.FaaSInstance) err
 
 	m.FaaSInstances[id] = faas
 
+	wsFaas := faas.(*WebsocketFaas)
+	m.WebsocketIndex[wsFaas.Connection.Request().RemoteAddr] = id
+
 	return nil
 }
 
 func (m *WebsocketManager) UnRegister(id string) error {
 	m.FaasMux.Lock()
 	defer m.FaasMux.Unlock()
+
+	delete(m.FaaSInstances, id)
+
+	return nil
+}
+
+func (m *WebsocketManager) HandleBreakSocket(remoteAddr string) error {
+	m.FaasMux.Lock()
+	defer m.FaasMux.Unlock()
+
+	id := m.WebsocketIndex[remoteAddr]
+	wsInstance := m.FaaSInstances[id].(*WebsocketFaas)
+	wsInstance.ConnectionStatus = "disactive"
 
 	delete(m.FaaSInstances, id)
 
@@ -236,61 +258,79 @@ func (m *WebsocketManager)Message(w http.ResponseWriter, r *http.Request) {
 	w.Write(res)
 }
 
+
+// Note: handle event return error will break the websocket connection
+func (m *WebsocketManager) HandleEvent(event faascommon.Event, ws *websocket.Conn) error {
+	var err error
+	switch (event.Type) {
+	case "register":
+		var regMsg faascommon.RegisterEvent
+		err  = json.Unmarshal([]byte(event.Message), &regMsg)
+		if err != nil {
+			log.GetLogger().Errorf("websocket faas manager handle event json unmarshal register event error: %v", err)
+			return err
+		}
+
+		faasSpec := faascommon.FaaSSpec{
+			Id: regMsg.FaasId,
+			Description: regMsg.Description,
+		}
+
+		log.GetLogger().Infof("register ws remote address %s", ws.Request().RemoteAddr)
+		faasInstance := NewWebsocketFaas(faasSpec, ws)
+		faasInstance.ConnectionStatus = "active"
+		err = m.Register(faasSpec.Id, faasInstance)
+		if err != nil {
+			log.GetLogger().Errorf("websocket faas manager register faas instance error: %v", err)
+			return err
+		}
+
+		event.Type = "response"
+		msg := faascommon.Response{
+			Code: 0,
+			Message: "faas instance " + faasSpec.Id + " register successful",
+		}
+
+		msgBytes, _ := json.Marshal(msg)
+		event.Message = string(msgBytes)
+		if err = faasInstance.Send(event); err != nil {
+			log.GetLogger().Errorf("websocket faas manager register faas instance response error: %v", err)
+			return err
+		}
+		break
+	case "response":
+		break
+	case "data":
+		var resEvent faascommon.Event
+		resEvent.Type = "data"
+		resEvent.Message = event.Message
+		if err = websocket.JSON.Send(ws, resEvent); err != nil {
+			log.GetLogger().Warnf("websocket faas manager handle event data send resEvent error: %v", err)
+			return nil
+		}
+		break
+	}
+
+	return nil
+}
+
 func (m *WebsocketManager) Upper(ws *websocket.Conn) {
 	var err error
 	for {
 		var event faascommon.Event
 
 		if err = websocket.JSON.Receive(ws, &event); err != nil {
+			m.HandleBreakSocket(ws.Request().RemoteAddr)
+			log.GetLogger().Infof("error ws remote address %s", ws.Request().RemoteAddr)
 			log.GetLogger().Errorf("websocket faas manager recv error: %v ", err)
 			break
 		}
 
-		if event.Type == "register" {
-			var regMsg faascommon.RegisterEvent
-
-			err  = json.Unmarshal([]byte(event.Message), &regMsg)
-			if err != nil {
-				log.GetLogger().Errorf("websocket faas manager json unmarshal register event error: %v", err)
-				continue
-			}
-
-			faasSpec := faascommon.FaaSSpec{
-				Id: regMsg.FaasId,
-				Description: regMsg.Description,
-			}
-
-			faasInstance := NewWebsocketFaas(faasSpec, ws)
-			err = m.Register(faasSpec.Id, faasInstance)
-			if err != nil {
-				log.GetLogger().Errorf("websocket faas manager register faas instance error: %v", err)
-				continue
-			}
-
-			event.Type = "response"
-			msg := faascommon.Response{
-				Code: 0,
-				Message: "faas instance " + faasSpec.Id + " register successful",
-			}
-
-			msgBytes, _ := json.Marshal(msg)
-			event.Message = string(msgBytes)
-			if err = faasInstance.Send(event); err != nil {
-				log.GetLogger().Errorf("websocket faas manager register faas instance response error: %v", err)
-				continue
-			}
-			continue
-		} else if ( event.Type == "response") {
-			continue
-		} else {
-			event.Type = "data"
-			event.Message = strings.ToUpper(event.Message)
-			if err = websocket.JSON.Send(ws, event); err != nil {
-				fmt.Println(err)
-				continue
-			}
+		err = m.HandleEvent(event, ws)
+		if err != nil {
+			log.GetLogger().Errorf("websocket faas manager handle event error: %v", err)
+			break
 		}
-
 
 	}
 }

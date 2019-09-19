@@ -6,9 +6,10 @@ type Event struct {
 }
 
 type RegisterEvent struct {
-	FaasId string `json:"faas_id"`
-	Description string `json:"description"`
-	NodeType string `json:"node_type"`
+	FaasId string `json:"faas_id,omitempty"`
+	Description string `json:"description,omitempty"`
+	NodeType string `json:"node_type,omitempty"`
+	Spec FaaSSpec `json:"spec, omitempty"`
 }
 
 type DeployMessage struct {
