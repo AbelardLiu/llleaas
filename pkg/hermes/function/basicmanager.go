@@ -18,6 +18,13 @@ type DeploySpec struct {
 	FaaSId string `json:"faasId"`
 }
 
+type InvokeSpec struct {
+	FunctionName string `json:"functionName"`
+	FunctionVersion string `json:"functionversion"`
+	FaaSId string `json:"faasId"`
+	Request string `json:"request, omitempty"`
+}
+
 type BasicFunctionManager struct {
 	Option *options.HermesOption
 	Getter common.FaaSGetter
@@ -48,7 +55,8 @@ func (m *BasicFunctionManager) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *BasicFunctionManager) List(w http.ResponseWriter, r *http.Request) {
-	panic("implement me")
+
+
 }
 
 func (m *BasicFunctionManager) Deploy(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +109,8 @@ func (m *BasicFunctionManager) Deploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO: recv response
+
 	// update record function - faas map
 	m.FunctionMux.Lock()
 	defer m.FunctionMux.Unlock()
@@ -110,7 +120,56 @@ func (m *BasicFunctionManager) Deploy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *BasicFunctionManager) Invoke(w http.ResponseWriter, r *http.Request) {
-	panic("implement me")
+	params := mux.Vars(r)
+	funcName := "unknown"
+	funcVersion := "unknown"
+	if val, ok := params["name"]; ok {
+		funcName = val
+	}
+	if val, ok := params["version"]; ok {
+		funcVersion = val
+	}
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.GetLogger().Errorf("basic function manager deploy error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var invokeSpec InvokeSpec
+	err = json.Unmarshal(body, &invokeSpec)
+
+	if ( invokeSpec.FunctionName != funcName || invokeSpec.FunctionVersion != funcVersion ) {
+		log.GetLogger().Errorf("basic function manager function check error")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	faasId := invokeSpec.FaaSId
+
+	faasInstance, err := m.Getter.Get(faasId)
+	if err != nil {
+		log.GetLogger().Errorf("basic function manager get faas instance error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	event, err := m.makeInvokeEvent(faasId, funcName, funcVersion, faasInstance.Spec().Platform, invokeSpec.Request)
+	if err != nil {
+		log.GetLogger().Errorf("basic function manager make deploy event error: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	err = faasInstance.Send(event)
+	if err != nil {
+		log.GetLogger().Errorf("basic function manager send event error: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// TODO: recv response
+
 }
 
 func (m *BasicFunctionManager)makeDeployEvent(faasId string, functionName string, functionVersion string, functionRuntime string) (common.Event, error) {
@@ -142,5 +201,36 @@ func (m *BasicFunctionManager)makeDeployEvent(faasId string, functionName string
 	return event, nil
 }
 
+func (m *BasicFunctionManager)makeInvokeEvent(faasId string, functionName string, functionVersion string,  runtime string, request string) (common.Event, error) {
+	address := "http://122.112.130.166:51010/function/code-zip/" + functionName + "/version/" + functionVersion
+	invokeMessage := common.InvokeMessage{
+		Function: functionName,
+		Version: functionVersion,
+		Address: address,
+		Runtime: runtime,
+		Request: []byte(request),
+	}
+
+	log.GetLogger().Infof("invoke message %v", invokeMessage)
+
+	invokeEvent := common.InvokeFunctionEvent{
+		FaasId: faasId,
+		Type: "invoke",
+		Message: invokeMessage,
+	}
+
+	invokeEventData, err := json.Marshal(invokeEvent)
+	if err != nil {
+		log.GetLogger().Errorf("basic function manager json marshal deploy event error: %v", err)
+		return common.Event{}, err
+	}
+
+	event := common.Event{
+		Type: "invoke",
+		Message: string(invokeEventData),
+	}
+
+	return event, nil
+}
 
 

@@ -55,9 +55,21 @@
     FunctionName <input id="deploy_function_name" type="text" placeholder="输入函数名">
     FunctionVersion <input id="deploy_function_version" type="text" placeholder="输入函数版本号">
 </form>
-
 <button onclick="deployFunction()">
     deployFunction
+</button>
+
+
+
+<form>
+    InvokeFunction
+    FaasId <input id="invoke_faas_id" type="text" placeholder="输入faas唯一标识号">
+    FunctionName <input id="invoke_function_name" type="text" placeholder="输入函数名">
+    FunctionVersion <input id="invoke_function_version" type="text" placeholder="输入函数版本号">
+    Request <textarea id="invoke_request"></textarea>
+</form>
+<button onclick="invokeFunction()">
+    invokeFunction
 </button>
 
 <br><br>
@@ -129,6 +141,26 @@
         xmlhttp.send(JSON.stringify(msg));
     }
 
+    function invokeFunction() {
+        var xmlhttp = new XMLHttpRequest();
+        var functionName = document.getElementById("invoke_function_name").value;
+        var functionVersion = document.getElementById("invoke_function_version").value;
+        var faasId = document.getElementById("invoke_faas_id").value;
+        var request = document.getElementById("invoke_request").value;
+        var url = "http://" + host.host + "/hermes/function/invoke/" + functionName + "/version/" + functionVersion;
+
+        var msg = {
+            functionName: functionName,
+            functionversion: functionVersion,
+            faasId: faasId,
+            functionRuntime: "webEmulator",
+            request: request,
+        };
+
+        xmlhttp.open("POST", url, false);
+        xmlhttp.send(JSON.stringify(msg));
+    }
+
     function getFaas() {
         var xmlhttp = new XMLHttpRequest();
         var url = "http://" + host.host + "/hermes/registry/faas";
@@ -173,6 +205,17 @@
         sock.send(JSON.stringify(data));
     }
 
+    function stringFromByteArray(data) {
+        var count = data.length;
+        var str = "";
+
+        for (var index = 0; index < count; index += 1) {
+            str += String.fromCharCode(data[index]);
+        }
+
+        return str;
+    }
+
     function register() {
         if ( sock !== null ) {
             sock.close();
@@ -183,11 +226,17 @@
         sock.onmessage = function(e) {
             var result = document.getElementById('result');
             var event = JSON.parse(e.data)
-            if (event.faas === "response") {
+            if (event.type === "response") {
                 let res = JSON.parse(event.message)
                 result.innerHTML = "结果为：" + res.message;
-            } else if (event.faas === "data") {
+            } else if (event.type === "data") {
                 result.innerHTML = "结果为：" + event.message;
+            } else if (event.type == "invoke"){
+                // change request from []byte to string
+                let res = JSON.parse(event.message);
+                //res.message.request = res.message.request.toString();
+                let request = stringFromByteArray(res.message.request)
+                result.innerHTML = "结果为：" + request;
             } else {
                 result.innerHTML = "结果为：" + event.message;
             }
